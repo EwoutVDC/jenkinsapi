@@ -75,7 +75,7 @@ class Job(JenkinsBase):
                 total_wait += invoke_block_delay
             if self.is_running():
                 running_build = self.get_last_build()
-                running_build.block_until_complete( delay=invoke_pre_check_delay )
+                running_build.block_until_complete( delay=invoke_block_delay )
             assert self.get_last_buildnumber() > original_build_no, "Job does not appear to have run."
         else:
             if self.is_queued():
