@@ -56,7 +56,9 @@ class Build(JenkinsBase):
         """
         Return a bool if running.
         """
+        log.debug("Polling build for running:")
         self.poll()
+        log.debug(str(self._data))
         return self._data["building"]
 
     def is_good( self ):
@@ -68,12 +70,11 @@ class Build(JenkinsBase):
 
     def block_until_complete(self, delay=15):
         assert isinstance( delay, int )
-        count = 0
+        total_wait = 0
         while self.is_running():
-            total_wait = delay * count
             log.info("Waited %is for %s #%s to complete" % ( total_wait, self.job.id(), self.id() ) )
             sleep( delay )
-            count += 1
+            total_wait += delay
 
     def get_jenkins_obj(self):
         return self.job.get_jenkins_obj()
