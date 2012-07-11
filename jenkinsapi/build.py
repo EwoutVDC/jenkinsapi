@@ -73,11 +73,8 @@ class Build(JenkinsBase):
         total_wait = 0
         while self.is_running():
             log.info("Waited %is for %s #%s to complete" % ( total_wait, self.job.id(), self.id() ) )
-            try:
-              sleep( delay )
-              total_wait += delay
-            except Exception as e:
-              log.exception("Caught exception while sleeping")
+            sleep( delay )
+            total_wait += delay
 
     def get_jenkins_obj(self):
         return self.job.get_jenkins_obj()
