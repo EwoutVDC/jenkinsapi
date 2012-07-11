@@ -2,6 +2,7 @@ import logging
 import urlparse
 import urllib2
 import urllib
+from bs4 import BeautifulSoup
 from collections import defaultdict
 from time import sleep
 from jenkinsapi.build import Build
@@ -20,6 +21,7 @@ class Job(JenkinsBase):
         self.name = name
         self.jenkins = jenkins_obj
         self._revmap = None
+        self._config = None
         JenkinsBase.__init__( self, url )
 
     def id( self ):
@@ -146,10 +148,18 @@ class Job(JenkinsBase):
 
     def get_last_build( self ):
         """
-        Get the last good build
+        Get the last build
         """
         bn = self.get_last_buildnumber()
         return self.get_build( bn )
+
+    def get_last_build_or_none(self):
+        """
+        Get the last build or None if there is no builds
+        """
+        bn = self.get_last_buildnumber()
+        if bn is not None:
+            return self.get_build(bn)
 
     def get_last_completed_build( self ):
         """
@@ -165,7 +175,7 @@ class Job(JenkinsBase):
         :param refresh: boolean, whether or not to refresh the revision -> buildnumber map
         :return: list of buildnumbers, [int]
         """
-        if not isinstance(revision, int):
+        if self.get_vcs() == 'svn' and not isinstance(revision, int):
             revision = int(revision)
         if self._revmap is None or refresh:
             self._revmap = self.get_revision_dict()
@@ -192,15 +202,84 @@ class Job(JenkinsBase):
     def is_running(self):
         self.poll()
         try:
-            return self.get_last_build().is_running()
+            build = self.get_last_build_or_none()
+            if build is not None:
+                return build.is_running()
         except NoBuildData:
             log.info("No build info available for %s, assuming not running." % str(self) )
-            return False
+        return False
 
     def get_config(self):
         '''Returns the config.xml from the job'''
         return self.hit_url("%(baseurl)s/config.xml" % self.__dict__)
 
+    def load_config(self):
+        self._config = self.get_config()
+
+    def get_vcs(self):
+        if self._config is None:
+            self.load_config()
+
+        bs = BeautifulSoup(self._config, 'xml')
+        vcsmap = {
+            'hudson.scm.SubversionSCM': 'svn',
+            'hudson.plugins.git.GitSCM': 'git',
+            'hudson.plugins.mercurial.MercurialSCM': 'hg',
+            }
+        return vcsmap.get(bs.project.scm.attrs['class'])
+
     def update_config(self, config):
         '''Update the config.xml to the job'''
         return self.post_data("%(baseurl)s/config.xml" % self.__dict__, config)
+
+    def get_downstream_jobs(self):
+        """
+        Get all the possible downstream jobs
+        :return List of Job
+        """
+        downstream_jobs = []
+        try:
+            for j in self._data['downstreamProjects']:
+                downstream_jobs.append(self.get_jenkins_obj().get_job(j['name']))
+        except KeyError:
+            return []
+        return downstream_jobs
+
+    def get_downstream_job_names(self):
+        """
+        Get all the possible downstream job names
+        :return List of String
+        """
+        downstream_jobs = []
+        try:
+            for j in self._data['downstreamProjects']:
+                downstream_jobs.append(j['name'])
+        except KeyError:
+            return []
+        return downstream_jobs
+
+    def get_upstream_job_names(self):
+        """
+        Get all the possible upstream job names
+        :return List of String
+        """
+        upstream_jobs = []
+        try:
+            for j in self._data['upstreamProjects']:
+                upstream_jobs.append(j['name'])
+        except KeyError:
+            return []
+        return upstream_jobs
+
+    def get_upstream_jobs(self):
+        """
+        Get all the possible upstream jobs
+        :return List of Job
+        """
+        upstream_jobs = []
+        try:
+            for j in self._data['upstreamProjects']:
+                upstream_jobs.append(self.get_jenkins_obj().get_job(j['name']))
+        except KeyError:
+            return []
+        return upstream_jobs
